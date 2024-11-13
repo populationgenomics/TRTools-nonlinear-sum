@@ -340,7 +340,7 @@ def perform_gwas_helper(
 
         # Standardize genotypes
         # Process genotypes: select only the largest allele for each sample
-        largest_allele_gts = np.max(gts, axis=1) if not beagle_dosages else np.max([np.sum(dosages, axis=1) for dosages in gts.values()], axis=0)
+        largest_allele_gts = np.max(gts, axis=1) 
 
         # Standardize the largest allele genotype
         std = np.std(largest_allele_gts)
