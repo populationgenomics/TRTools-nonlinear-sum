@@ -378,13 +378,13 @@ def perform_gwas_helper(
             outcome[called_samples_filter],
             summed_gts
         )
-
+        std = np.std(summed_gts)
         # Write results
         linear_result = model_results['linear']
         log_result = model_results['log']
         quad_result = model_results['quadratic']
         cubic_result = model_results['cubic']
-
+    
         # Write all model results
         outfile.write("{:.{}e}\t{}\t{}\t{}\t{}\t".format(
             linear_result.pvalues[0],
