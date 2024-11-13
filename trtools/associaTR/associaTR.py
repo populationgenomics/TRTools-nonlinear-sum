@@ -357,19 +357,15 @@ def perform_gwas_helper(
             continue
         else:
             outfile.write('False\t')
-
-        # Process genotypes
-        if not beagle_dosages:
-            summed_gts = np.sum(gts, axis=1)
-        else:
-            summed_gts = np.sum([
-                len_*np.sum(dosages, axis=1) for len_, dosages in gts.items()
-            ], axis=0)
         
         # Standardize genotypes
-        std = np.std(summed_gts)
-        summed_gts = (summed_gts - np.mean(summed_gts))/std
-        covars[called_samples_filter, 0] = summed_gts
+        # Process genotypes: select only the largest allele for each sample
+        largest_allele_gts = np.max(gts, axis=1) if not beagle_dosages else np.max([np.sum(dosages, axis=1) for dosages in gts.values()], axis=0)
+
+        # Standardize the largest allele genotype
+        std = np.std(largest_allele_gts)
+        standardized_gts = (largest_allele_gts - np.mean(largest_allele_gts)) / std
+        covars[called_samples_filter, 0] = standardized_gts
 
         # Fit polynomial models
         model_results = fit_polynomial_models(
