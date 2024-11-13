@@ -206,36 +206,38 @@ def perform_gwas_helper(
     outcome = covars[:, 1].copy()
     covars[:, 1] = 1  # reuse the column that was the outcome as the intercept
 
-    def fit_polynomial_models(X_base, y, genotype):
+    def fit_polynomial_models(X_base, y, largest_allele_gts):
         """
         Fit linear, log, quadratic, and cubic models and perform likelihood ratio tests
         
         Returns:
         - Dictionary containing model results and LRT p-values
         """
+        std = np.std(largest_allele_gts)
+        standardized_gts = (largest_allele_gts - np.mean(largest_allele_gts)) / std
+        
         # Create polynomial and log terms
-        quad_term = genotype**2
-        cubic_term = genotype**3
-        log_term = np.log(genotype + 1)  # Add 1 to handle zeros
+        quad_term = standardized_gts**2
+        cubic_term = standardized_gts**3
+        log_term = np.log(largest_allele_gts + 1)  # Add 1 to handle zeros
         
         # Fit linear model
-        X_linear = np.column_stack([X_base, genotype])
+        X_linear = np.column_stack([standardized_gts,X_base])
         linear_model = OLS(y, X_linear, missing='drop')
         linear_result = linear_model.fit()
         
         # Fit log model
-        X_log = np.column_stack([X_base, log_term])
-        X_log = np.where(np.isinf(X_log), np.nan, X_log) 
+        X_log = np.column_stack([log_term,X_base])
         log_model = OLS(y, X_log, missing='drop')
         log_result = log_model.fit()
         
         # Fit quadratic model
-        X_quad = np.column_stack([X_base, genotype, quad_term])
+        X_quad = np.column_stack([quad_term,X_base, standardized_gts])
         quad_model = OLS(y, X_quad, missing='drop')
         quad_result = quad_model.fit()
         
         # Fit cubic model
-        X_cubic = np.column_stack([X_base, genotype, quad_term, cubic_term])
+        X_cubic = np.column_stack([cubic_term,X_base, standardized_gts, quad_term])
         cubic_model = OLS(y, X_cubic, missing='drop')
         cubic_result = cubic_model.fit()
         
@@ -372,16 +374,12 @@ def perform_gwas_helper(
             )
             )
             outfile.write('False\t')
-        
-        
-        standardized_gts = (largest_allele_gts - np.mean(largest_allele_gts)) / std
-        covars[called_samples_filter, 0] = standardized_gts
 
         # Fit polynomial models
         model_results = fit_polynomial_models(
             covars[called_samples_filter, 1:],
             outcome[called_samples_filter],
-            covars[called_samples_filter, 0]
+            largest_allele_gts
         )
 
         # Write results
