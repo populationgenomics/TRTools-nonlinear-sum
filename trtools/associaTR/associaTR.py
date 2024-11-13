@@ -225,7 +225,7 @@ def perform_gwas_helper(
         
         # Fit log model
         X_log = np.column_stack([X_base, log_term])
-        X_log = X_log.replace([np.inf, -np.inf], np.nan).dropna()
+        X_log = np.where(np.isinf(X_log), np.nan, X_log) 
         log_model = OLS(y, X_log, missing='drop')
         log_result = log_model.fit()
         
