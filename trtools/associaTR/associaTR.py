@@ -337,6 +337,15 @@ def perform_gwas_helper(
 
         covars[:, 0] = np.nan  # reuse the column that was the ids as the genotypes
         n_loci += 1
+
+        # Standardize genotypes
+        # Process genotypes: select only the largest allele for each sample
+        largest_allele_gts = np.max(gts, axis=1) if not beagle_dosages else np.max([np.sum(dosages, axis=1) for dosages in gts.values()], axis=0)
+
+        # Standardize the largest allele genotype
+        std = np.std(largest_allele_gts)
+        if std == 0:
+            continue
         
         # Write basic locus information
         allele_names = ','.join(list(unique_alleles.astype(str)))
@@ -358,14 +367,7 @@ def perform_gwas_helper(
         else:
             outfile.write('False\t')
         
-        # Standardize genotypes
-        # Process genotypes: select only the largest allele for each sample
-        largest_allele_gts = np.max(gts, axis=1) if not beagle_dosages else np.max([np.sum(dosages, axis=1) for dosages in gts.values()], axis=0)
-
-        # Standardize the largest allele genotype
-        std = np.std(largest_allele_gts)
-        if std == 0:
-            continue
+        
         standardized_gts = (largest_allele_gts - np.mean(largest_allele_gts)) / std
         covars[called_samples_filter, 0] = standardized_gts
 
