@@ -136,10 +136,11 @@ def perform_gwas_helper(
         "chrom\tpos\talleles\tn_samples_tested\tlocus_filtered\t"
         f"p_{phenotype_name}\tcoeff_{phenotype_name}\t"
         f"se_{phenotype_name}\tregression_R^2\t"
-        "best_model\t"  # Linear, Quadratic, or Cubic
+        "best_model\t"  # Linear, Log, Quadratic, or Cubic
+        "log_p\tlog_coeff\tlog_se\tlog_R^2\t"
         "quad_p\tquad_coeff\tquad_se\tquad_R^2\t"
         "cubic_p\tcubic_coeff\tcubic_se\tcubic_R^2\t"
-        "lrt_p_quad_vs_linear\tlrt_p_cubic_vs_quad\t"
+        "lrt_p_log_vs_linear\tlrt_p_quad_vs_linear\tlrt_p_cubic_vs_quad\t"
     )
     outfile.flush()
    
@@ -207,19 +208,25 @@ def perform_gwas_helper(
 
     def fit_polynomial_models(X_base, y, genotype):
         """
-        Fit linear, quadratic, and cubic models and perform likelihood ratio tests
+        Fit linear, log, quadratic, and cubic models and perform likelihood ratio tests
         
         Returns:
         - Dictionary containing model results and LRT p-values
         """
-        # Create polynomial terms
+        # Create polynomial and log terms
         quad_term = genotype**2
         cubic_term = genotype**3
+        log_term = np.log(genotype + 1)  # Add 1 to handle zeros
         
         # Fit linear model
         X_linear = np.column_stack([X_base, genotype])
         linear_model = OLS(y, X_linear, missing='drop')
         linear_result = linear_model.fit()
+        
+        # Fit log model
+        X_log = np.column_stack([X_base, log_term])
+        log_model = OLS(y, X_log, missing='drop')
+        log_result = log_model.fit()
         
         # Fit quadratic model
         X_quad = np.column_stack([X_base, genotype, quad_term])
@@ -235,6 +242,13 @@ def perform_gwas_helper(
         def calculate_lrt_pvalue(restricted_llf, full_llf, df_diff):
             lrt_stat = 2 * (full_llf - restricted_llf)
             return chi2.sf(lrt_stat, df_diff)
+        
+        # LRT for log vs linear
+        lrt_p_log = calculate_lrt_pvalue(
+            linear_result.llf,
+            log_result.llf,
+            1  # df difference is 1 (adding one term)
+        )
         
         # LRT for quadratic vs linear
         lrt_p_quad = calculate_lrt_pvalue(
@@ -252,15 +266,19 @@ def perform_gwas_helper(
         
         # Determine best model based on LRT p-values
         best_model = "linear"
-        if lrt_p_quad < 0.05:
+        if lrt_p_log < 0.05:
+            best_model = "log"
+        elif lrt_p_quad < 0.05:
             best_model = "quadratic"
             if lrt_p_cubic < 0.05:
                 best_model = "cubic"
         
         return {
             'linear': linear_result,
+            'log': log_result,
             'quadratic': quad_result,
             'cubic': cubic_result,
+            'lrt_p_log': lrt_p_log,
             'lrt_p_quad': lrt_p_quad,
             'lrt_p_cubic': lrt_p_cubic,
             'best_model': best_model
@@ -362,6 +380,7 @@ def perform_gwas_helper(
 
         # Write results
         linear_result = model_results['linear']
+        log_result = model_results['log']
         quad_result = model_results['quadratic']
         cubic_result = model_results['cubic']
 
@@ -373,6 +392,15 @@ def perform_gwas_helper(
             linear_result.bse[0]/std*pheno_std,
             linear_result.rsquared,
             model_results['best_model']
+        ))
+
+        # Add log results
+        outfile.write("{:.{}e}\t{}\t{}\t{}\t".format(
+            log_result.pvalues[0],
+            pval_precision,
+            log_result.params[0]/std*pheno_std,
+            log_result.bse[0]/std*pheno_std,
+            log_result.rsquared
         ))
 
         # Add quadratic results
@@ -394,7 +422,9 @@ def perform_gwas_helper(
         ))
 
         # Add LRT results
-        outfile.write("{:.{}e}\t{:.{}e}\t".format(
+        outfile.write("{:.{}e}\t{:.{}e}\t{:.{}e}\t".format(
+            model_results['lrt_p_log'],
+            pval_precision,
             model_results['lrt_p_quad'],
             pval_precision,
             model_results['lrt_p_cubic'],
@@ -426,8 +456,6 @@ def perform_gwas_helper(
             ),
             flush=True
         )
-    else:
-        print("No variants found in the region being looked at\n", flush=True)
 
 def perform_gwas(
         outfname,
