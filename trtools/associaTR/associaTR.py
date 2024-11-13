@@ -225,6 +225,7 @@ def perform_gwas_helper(
         
         # Fit log model
         X_log = np.column_stack([X_base, log_term])
+        X_log = X_log.replace([np.inf, -np.inf], np.nan).dropna()
         log_model = OLS(y, X_log, missing='drop')
         log_result = log_model.fit()
         
@@ -337,34 +338,39 @@ def perform_gwas_helper(
 
         covars[:, 0] = np.nan  # reuse the column that was the ids as the genotypes
         n_loci += 1
-
-        # Standardize genotypes
-        # Process genotypes: select only the largest allele for each sample
-        largest_allele_gts = np.max(gts, axis=1) 
-
-        # Standardize the largest allele genotype
-        std = np.std(largest_allele_gts)
-        if std == 0:
-            continue
         
         # Write basic locus information
         allele_names = ','.join(list(unique_alleles.astype(str)))
-        outfile.write(
-            "{}\t{}\t{}\t{}\t".format(
-                chrom, pos, allele_names, np.sum(called_samples_filter)
-            )
-        )
+        
 
         # Check if locus should be filtered
         if not locus_filtered and covars.shape[1] >= np.sum(called_samples_filter):
             locus_filtered = 'n covars >= n samples'
         if locus_filtered:
+            outfile.write(
+            "{}\t{}\t{}\t{}\t".format(
+                chrom, pos, allele_names, np.sum(called_samples_filter)
+            )
+            )
             outfile.write('{}\tnan\tnan\tnan\tnan\tnan\tnan\tnan\tnan\tnan\tnan\tnan\tnan\tnan\tnan\tnan\t'.format(locus_filtered))
             outfile.write('\t'.join(locus_details))
             outfile.write('\n')
             outfile.flush()
             continue
         else:
+            # Standardize genotypes
+            # Process genotypes: select only the largest allele for each sample
+            largest_allele_gts = np.max(gts, axis=1) if not beagle_dosages else np.max([np.sum(dosages, axis=1) for dosages in gts.values()], axis=0)
+    
+            # Standardize the largest allele genotype
+            std = np.std(largest_allele_gts)
+            if std == 0:
+                continue
+            outfile.write(
+            "{}\t{}\t{}\t{}\t".format(
+                chrom, pos, allele_names, np.sum(called_samples_filter)
+            )
+            )
             outfile.write('False\t')
         
         
@@ -654,4 +660,3 @@ def main(args):
 
 if __name__ == '__main__':
     run()
-
