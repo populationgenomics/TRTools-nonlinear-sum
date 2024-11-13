@@ -364,6 +364,8 @@ def perform_gwas_helper(
 
         # Standardize the largest allele genotype
         std = np.std(largest_allele_gts)
+        if std == 0:
+            continue
         standardized_gts = (largest_allele_gts - np.mean(largest_allele_gts)) / std
         covars[called_samples_filter, 0] = standardized_gts
 
